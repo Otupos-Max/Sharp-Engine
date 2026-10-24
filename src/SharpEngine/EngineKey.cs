@@ -8,5 +8,13 @@ public enum EngineKey
     S,
     D,
     Space,
-    Enter
+    Enter,
+    Up,
+    Down,
+    Left,
+    Right,
+    Q,
+    E,
+    Z,
+    X
 }

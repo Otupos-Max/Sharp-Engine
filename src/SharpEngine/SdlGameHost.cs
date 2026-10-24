@@ -31,6 +31,7 @@ public sealed class SdlGameHost
 
         IntPtr window = IntPtr.Zero;
         IntPtr renderer = IntPtr.Zero;
+        RenderContext? context = null;
         var gameInitialized = false;
 
         try
@@ -41,7 +42,7 @@ public sealed class SdlGameHost
                 SDL.SDL_WINDOWPOS_CENTERED,
                 _width,
                 _height,
-                SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN);
+                SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN | SDL.SDL_WindowFlags.SDL_WINDOW_RESIZABLE);
             if (window == IntPtr.Zero)
             {
                 throw new InvalidOperationException($"SDL could not create a window: {SDL.SDL_GetError()}");
@@ -53,13 +54,18 @@ public sealed class SdlGameHost
                 SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED | SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC);
             if (renderer == IntPtr.Zero)
             {
-                throw new InvalidOperationException($"SDL could not create a renderer: {SDL.SDL_GetError()}");
+                renderer = SDL.SDL_CreateRenderer(window, -1, SDL.SDL_RendererFlags.SDL_RENDERER_SOFTWARE);
+                if (renderer == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException($"SDL could not create a renderer: {SDL.SDL_GetError()}");
+                }
             }
 
             var input = new InputState();
-            var context = new RenderContext(renderer);
+            context = new RenderContext(renderer);
             game.Initialize();
             gameInitialized = true;
+            game.StartScene();
 
             var clock = Stopwatch.StartNew();
             var previousTime = clock.Elapsed;
@@ -68,6 +74,7 @@ public sealed class SdlGameHost
 
             while (isRunning && !game.ExitRequested)
             {
+                input.BeginFrame();
                 while (SDL.SDL_PollEvent(out var @event) == 1)
                 {
                     switch (@event.type)
@@ -90,13 +97,13 @@ public sealed class SdlGameHost
                 }
 
                 var currentTime = clock.Elapsed;
-                game.Update(new GameTime(currentTime - previousTime, currentTime, frame), input);
+                game.Tick(new GameTime(currentTime - previousTime, currentTime, frame), input);
                 if (game.ExitRequested)
                 {
                     break;
                 }
 
-                game.Render(context);
+                game.Draw(context);
                 context.Present();
 
                 previousTime = currentTime;
@@ -109,13 +116,21 @@ public sealed class SdlGameHost
             {
                 if (gameInitialized)
                 {
-                    game.Shutdown();
+                    try
+                    {
+                        game.Shutdown();
+                    }
+                    finally
+                    {
+                        game.DisposeScene();
+                    }
                 }
             }
             finally
             {
                 if (renderer != IntPtr.Zero)
                 {
+                    context?.Dispose();
                     SDL.SDL_DestroyRenderer(renderer);
                 }
 
@@ -140,6 +155,14 @@ public sealed class SdlGameHost
             SDL.SDL_Keycode.SDLK_d => EngineKey.D,
             SDL.SDL_Keycode.SDLK_SPACE => EngineKey.Space,
             SDL.SDL_Keycode.SDLK_RETURN => EngineKey.Enter,
+            SDL.SDL_Keycode.SDLK_UP => EngineKey.Up,
+            SDL.SDL_Keycode.SDLK_DOWN => EngineKey.Down,
+            SDL.SDL_Keycode.SDLK_LEFT => EngineKey.Left,
+            SDL.SDL_Keycode.SDLK_RIGHT => EngineKey.Right,
+            SDL.SDL_Keycode.SDLK_q => EngineKey.Q,
+            SDL.SDL_Keycode.SDLK_e => EngineKey.E,
+            SDL.SDL_Keycode.SDLK_z => EngineKey.Z,
+            SDL.SDL_Keycode.SDLK_x => EngineKey.X,
             _ => (EngineKey?)null
         };
 

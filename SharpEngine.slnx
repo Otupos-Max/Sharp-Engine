@@ -5,4 +5,7 @@
   <Folder Name="/src/">
     <Project Path="src/SharpEngine/SharpEngine.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SharpEngine.Tests/SharpEngine.Tests.csproj" />
+  </Folder>
 </Solution>

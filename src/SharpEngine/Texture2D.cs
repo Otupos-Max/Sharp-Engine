@@ -2,52 +2,49 @@ namespace SharpEngine;
 
 public sealed class Texture2D : IDisposable
 {
-    private IntPtr _nativeTexture;
+    private IRenderTexture? _resource;
+    private readonly int _width;
+    private readonly int _height;
 
-    internal Texture2D(RenderContext context, IntPtr nativeTexture, int width, int height)
+    internal Texture2D(RenderContext context, IRenderTexture resource)
     {
         Context = context;
-        _nativeTexture = nativeTexture;
-        Width = width;
-        Height = height;
+        _resource = resource;
+        _width = resource.Width;
+        _height = resource.Height;
     }
 
     internal RenderContext Context { get; }
 
-    public int Width { get; }
+    public int Width => _width;
 
-    public int Height { get; }
+    public int Height => _height;
 
-    public bool IsDisposed => _nativeTexture == IntPtr.Zero;
+    public bool IsDisposed => _resource is null;
 
     public void Dispose()
     {
-        if (_nativeTexture == IntPtr.Zero)
+        if (_resource is null)
         {
             return;
         }
 
-        var nativeTexture = _nativeTexture;
-        _nativeTexture = IntPtr.Zero;
+        var resource = _resource;
+        _resource = null;
         Context.ReleaseTexture(this);
-        SDL2.SDL.SDL_DestroyTexture(nativeTexture);
+        resource.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    internal IntPtr GetNativeHandle()
+    internal IRenderTexture GetResource()
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
-        return _nativeTexture;
+        return _resource!;
     }
 
     internal void DisposeFromContext()
     {
-        if (_nativeTexture == IntPtr.Zero)
-        {
-            return;
-        }
-
-        SDL2.SDL.SDL_DestroyTexture(_nativeTexture);
-        _nativeTexture = IntPtr.Zero;
+        _resource?.Dispose();
+        _resource = null;
     }
 }

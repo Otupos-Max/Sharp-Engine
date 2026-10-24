@@ -32,6 +32,7 @@ public sealed class TextureTests
             Assert.Equal(1, game.Texture.Width);
             Assert.Equal(1, game.Texture.Height);
             Assert.True(game.Texture.IsDisposed);
+            Assert.True(game.StreamRemainedOpen);
         }
         finally
         {
@@ -78,6 +79,8 @@ public sealed class TextureTests
     {
         public Texture2D? Texture { get; private set; }
 
+        public bool StreamRemainedOpen { get; private set; }
+
         public override void Update(GameTime time, InputState input)
         {
             if (time.Frame > 0)
@@ -88,7 +91,15 @@ public sealed class TextureTests
 
         public override void Render(RenderContext context)
         {
-            var texture = Texture ??= context.LoadTexture(bitmapPath);
+            var texture = Texture;
+            if (texture is null)
+            {
+                using var stream = File.OpenRead(bitmapPath);
+                texture = context.LoadTexture(stream);
+                Texture = texture;
+                StreamRemainedOpen = stream.CanRead;
+            }
+
             context.DrawTexture(texture, Vector2.Zero, new Vector2(16, 16));
             context.DrawTexture(texture, Vector2.Zero, new Vector2(8, 8), 0, 0, 1, 1);
         }

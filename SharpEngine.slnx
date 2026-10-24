@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/SharpEngine.Demo/SharpEngine.Demo.csproj" />
+    <Project Path="samples/SharpEngine.Android/SharpEngine.Android.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/SharpEngine/SharpEngine.csproj" />

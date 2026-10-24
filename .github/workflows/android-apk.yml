@@ -1,0 +1,59 @@
+name: Android APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Install .NET Android workload
+        run: dotnet workload install android
+
+      - name: Run engine tests
+        run: dotnet test tests/SharpEngine.Tests/SharpEngine.Tests.csproj --configuration Release
+
+      - name: Build installable debug APK
+        run: dotnet build samples/SharpEngine.Android/SharpEngine.Android.csproj --configuration Debug --framework net10.0-android -t:Rebuild -p:AndroidPackageFormat=apk -p:AndroidBuildApplicationPackage=true
+
+      - name: Stage APK
+        run: |
+          mkdir -p artifacts
+          cp samples/SharpEngine.Android/bin/Debug/net10.0-android/*-Signed.apk artifacts/SharpEngine-android-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharp-engine-android-debug
+          path: artifacts/SharpEngine-android-debug.apk
+          if-no-files-found: error
+          retention-days: 14

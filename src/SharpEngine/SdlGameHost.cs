@@ -62,7 +62,7 @@ public sealed class SdlGameHost
             }
 
             var input = new InputState();
-            context = new RenderContext(renderer);
+            context = new RenderContext(new SdlRenderBackend(renderer));
             game.Initialize();
             gameInitialized = true;
             game.StartScene();

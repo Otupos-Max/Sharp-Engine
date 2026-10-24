@@ -1,70 +1,53 @@
 using System.Numerics;
-using SDL2;
 
 namespace SharpEngine;
 
-public sealed class RenderContext
+public sealed class RenderContext : IDisposable
 {
-    private readonly IntPtr _renderer;
+    private readonly IRenderBackend _backend;
     private readonly HashSet<Texture2D> _textures = [];
     private bool _isDisposed;
 
-    internal RenderContext(IntPtr renderer)
+    internal RenderContext(IRenderBackend backend)
     {
-        _renderer = renderer;
+        _backend = backend;
+    }
+
+    public Vector2 OutputSize
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _backend.OutputSize;
+        }
     }
 
     public void Clear(RenderColor color)
     {
-        SetDrawColor(color);
-        if (SDL.SDL_RenderClear(_renderer) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not clear the frame: {SDL.SDL_GetError()}");
-        }
+        ThrowIfDisposed();
+        _backend.Clear(color);
     }
 
     public void FillRectangle(Vector2 position, Vector2 size, RenderColor color)
     {
         ValidateRectangle(position, size);
-        SetDrawColor(color);
-        var rectangle = new SDL.SDL_Rect
-        {
-            x = (int)position.X,
-            y = (int)position.Y,
-            w = (int)size.X,
-            h = (int)size.Y
-        };
-
-        if (SDL.SDL_RenderFillRect(_renderer, ref rectangle) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not fill the rectangle: {SDL.SDL_GetError()}");
-        }
+        ThrowIfDisposed();
+        _backend.FillRectangle(position, size, color);
     }
 
     public void DrawRectangle(Vector2 position, Vector2 size, RenderColor color)
     {
         ValidateRectangle(position, size);
-        SetDrawColor(color);
-        var rectangle = new SDL.SDL_Rect
-        {
-            x = (int)position.X,
-            y = (int)position.Y,
-            w = (int)size.X,
-            h = (int)size.Y
-        };
-
-        if (SDL.SDL_RenderDrawRect(_renderer, ref rectangle) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not draw the rectangle: {SDL.SDL_GetError()}");
-        }
+        ThrowIfDisposed();
+        _backend.DrawRectangle(position, size, color);
     }
 
     public void DrawLine(Vector2 start, Vector2 end, RenderColor color)
     {
         ValidatePoint(start, nameof(start));
         ValidatePoint(end, nameof(end));
-        SetDrawColor(color);
-        DrawLineUnchecked(start, end);
+        ThrowIfDisposed();
+        _backend.DrawLine(start, end, color);
     }
 
     public void DrawCircle(Vector2 center, float radius, RenderColor color, int segments = 32)
@@ -77,73 +60,45 @@ public sealed class RenderContext
 
         ArgumentOutOfRangeException.ThrowIfLessThan(segments, 3);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(segments, 4096);
-        SetDrawColor(color);
+        ThrowIfDisposed();
 
         var previous = center + new Vector2(radius, 0f);
         for (var index = 1; index <= segments; index++)
         {
             var angle = 2f * MathF.PI * index / segments;
             var next = center + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
-            DrawLineUnchecked(previous, next);
+            _backend.DrawLine(previous, next, color);
             previous = next;
         }
     }
 
     public Texture2D LoadTexture(string filePath)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ThrowIfDisposed();
+        var resource = _backend.LoadTexture(filePath);
+        var texture = new Texture2D(this, resource);
+        _textures.Add(texture);
+        return texture;
+    }
 
-        var surface = SDL.SDL_LoadBMP(filePath);
-        if (surface == IntPtr.Zero)
-        {
-            throw new InvalidOperationException(
-                $"SDL could not load bitmap '{filePath}': {SDL.SDL_GetError()}");
-        }
+    public Texture2D LoadTexture(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ThrowIfDisposed();
 
-        try
-        {
-            var nativeTexture = SDL.SDL_CreateTextureFromSurface(_renderer, surface);
-            if (nativeTexture == IntPtr.Zero)
-            {
-                throw new InvalidOperationException(
-                    $"SDL could not create texture from '{filePath}': {SDL.SDL_GetError()}");
-            }
-
-            if (SDL.SDL_QueryTexture(nativeTexture, out _, out _, out var width, out var height) < 0)
-            {
-                SDL.SDL_DestroyTexture(nativeTexture);
-                throw new InvalidOperationException(
-                    $"SDL could not read texture dimensions for '{filePath}': {SDL.SDL_GetError()}");
-            }
-
-            var texture = new Texture2D(this, nativeTexture, width, height);
-            _textures.Add(texture);
-            return texture;
-        }
-        finally
-        {
-            SDL.SDL_FreeSurface(surface);
-        }
+        var resource = _backend.LoadTexture(stream);
+        var texture = new Texture2D(this, resource);
+        _textures.Add(texture);
+        return texture;
     }
 
     public void DrawTexture(Texture2D texture, Vector2 position, Vector2 size)
     {
         ArgumentNullException.ThrowIfNull(texture);
         ValidateRectangle(position, size);
-        var nativeTexture = GetNativeTexture(texture);
-        var destination = new SDL.SDL_Rect
-        {
-            x = (int)position.X,
-            y = (int)position.Y,
-            w = (int)size.X,
-            h = (int)size.Y
-        };
-
-        if (SDL.SDL_RenderCopy(_renderer, nativeTexture, IntPtr.Zero, ref destination) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not draw texture: {SDL.SDL_GetError()}");
-        }
+        ThrowIfDisposed();
+        _backend.DrawTexture(GetResource(texture), position, size, null, null);
     }
 
     public void DrawTexture(
@@ -167,48 +122,30 @@ public sealed class RenderContext
             throw new ArgumentOutOfRangeException(nameof(sourceWidth), "Source rectangle must fit inside the texture.");
         }
 
-        var nativeTexture = GetNativeTexture(texture);
-        var source = new SDL.SDL_Rect
-        {
-            x = sourceX,
-            y = sourceY,
-            w = sourceWidth,
-            h = sourceHeight
-        };
-        var destination = new SDL.SDL_Rect
-        {
-            x = (int)position.X,
-            y = (int)position.Y,
-            w = (int)size.X,
-            h = (int)size.Y
-        };
-
-        if (SDL.SDL_RenderCopy(_renderer, nativeTexture, ref source, ref destination) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not draw texture region: {SDL.SDL_GetError()}");
-        }
+        ThrowIfDisposed();
+        _backend.DrawTexture(
+            GetResource(texture),
+            position,
+            size,
+            new Vector2(sourceX, sourceY),
+            new Vector2(sourceWidth, sourceHeight));
     }
 
     public void DrawWireframe(Mesh mesh, Matrix4x4 worldTransform, Camera3D camera, RenderColor color)
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(camera);
 
-        if (SDL.SDL_GetRendererOutputSize(_renderer, out var width, out var height) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not get the renderer size: {SDL.SDL_GetError()}");
-        }
-
-        if (width <= 0 || height <= 0)
+        var outputSize = _backend.OutputSize;
+        if (outputSize.X <= 0f || outputSize.Y <= 0f)
         {
             return;
         }
 
-        var viewProjection = worldTransform * camera.CreateViewProjection((float)width / height);
+        var viewProjection = worldTransform * camera.CreateViewProjection(outputSize.X / outputSize.Y);
         var vertices = mesh.Vertices.Span;
         var indices = mesh.TriangleIndices.Span;
-        SetDrawColor(color);
         for (var index = 0; index < indices.Length; index += 3)
         {
             var first = indices[index];
@@ -218,19 +155,19 @@ public sealed class RenderContext
             var secondClip = Vector4.Transform(new Vector4(vertices[second], 1f), viewProjection);
             var thirdClip = Vector4.Transform(new Vector4(vertices[third], 1f), viewProjection);
 
-            DrawProjectedSegment(firstClip, secondClip, width, height);
-            DrawProjectedSegment(secondClip, thirdClip, width, height);
-            DrawProjectedSegment(thirdClip, firstClip, width, height);
+            DrawProjectedSegment(firstClip, secondClip, outputSize, color);
+            DrawProjectedSegment(secondClip, thirdClip, outputSize, color);
+            DrawProjectedSegment(thirdClip, firstClip, outputSize, color);
         }
     }
 
     internal void Present()
     {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-        SDL.SDL_RenderPresent(_renderer);
+        ThrowIfDisposed();
+        _backend.Present();
     }
 
-    internal void Dispose()
+    public void Dispose()
     {
         if (_isDisposed)
         {
@@ -244,15 +181,44 @@ public sealed class RenderContext
         }
 
         _textures.Clear();
+        _backend.Dispose();
     }
+
+    internal void ReleaseTexture(Texture2D texture) => _textures.Remove(texture);
+
+    private IRenderTexture GetResource(Texture2D texture)
+    {
+        if (!ReferenceEquals(texture.Context, this))
+        {
+            throw new InvalidOperationException("A texture can only be drawn by the context that created it.");
+        }
+
+        return texture.GetResource();
+    }
+
+    private void DrawProjectedSegment(Vector4 start, Vector4 end, Vector2 outputSize, RenderColor color)
+    {
+        if (!ClipSegment(ref start, ref end))
+        {
+            return;
+        }
+
+        var startNdc = new Vector2(start.X, start.Y) / start.W;
+        var endNdc = new Vector2(end.X, end.Y) / end.W;
+        var startScreen = new Vector2(
+            (startNdc.X * 0.5f + 0.5f) * outputSize.X,
+            (0.5f - startNdc.Y * 0.5f) * outputSize.Y);
+        var endScreen = new Vector2(
+            (endNdc.X * 0.5f + 0.5f) * outputSize.X,
+            (0.5f - endNdc.Y * 0.5f) * outputSize.Y);
+        _backend.DrawLine(startScreen, endScreen, color);
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
 
     private static void ValidateRectangle(Vector2 position, Vector2 size)
     {
-        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
-        {
-            throw new ArgumentOutOfRangeException(nameof(position), "Rectangle position must be finite.");
-        }
-
+        ValidatePoint(position, nameof(position));
         if (!float.IsFinite(size.X) || !float.IsFinite(size.Y) || size.X <= 0f || size.Y <= 0f)
         {
             throw new ArgumentOutOfRangeException(nameof(size), "Rectangle size must be finite and positive.");
@@ -265,54 +231,6 @@ public sealed class RenderContext
         {
             throw new ArgumentOutOfRangeException(parameterName, "Point coordinates must be finite.");
         }
-    }
-
-    private void SetDrawColor(RenderColor color)
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-        if (SDL.SDL_SetRenderDrawColor(_renderer, color.Red, color.Green, color.Blue, color.Alpha) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not set the render color: {SDL.SDL_GetError()}");
-        }
-    }
-
-    private IntPtr GetNativeTexture(Texture2D texture)
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-        if (!ReferenceEquals(texture.Context, this))
-        {
-            throw new InvalidOperationException("A texture can only be drawn by the context that created it.");
-        }
-
-        return texture.GetNativeHandle();
-    }
-
-    internal void ReleaseTexture(Texture2D texture) => _textures.Remove(texture);
-
-    private void DrawLineUnchecked(Vector2 start, Vector2 end)
-    {
-        if (SDL.SDL_RenderDrawLine(_renderer, (int)start.X, (int)start.Y, (int)end.X, (int)end.Y) < 0)
-        {
-            throw new InvalidOperationException($"SDL could not draw the line: {SDL.SDL_GetError()}");
-        }
-    }
-
-    private void DrawProjectedSegment(Vector4 start, Vector4 end, int width, int height)
-    {
-        if (!ClipSegment(ref start, ref end))
-        {
-            return;
-        }
-
-        var startNdc = new Vector2(start.X, start.Y) / start.W;
-        var endNdc = new Vector2(end.X, end.Y) / end.W;
-        var startScreen = new Vector2(
-            (startNdc.X * 0.5f + 0.5f) * width,
-            (0.5f - startNdc.Y * 0.5f) * height);
-        var endScreen = new Vector2(
-            (endNdc.X * 0.5f + 0.5f) * width,
-            (0.5f - endNdc.Y * 0.5f) * height);
-        DrawLineUnchecked(startScreen, endScreen);
     }
 
     private static bool ClipSegment(ref Vector4 start, ref Vector4 end)

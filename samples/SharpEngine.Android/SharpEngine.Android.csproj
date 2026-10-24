@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SharpEngine.Android</RootNamespace>
+    <ApplicationId>com.otupos.sharpengine</ApplicationId>
+    <ApplicationTitle>Sharp Engine</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <AndroidBuildApplicationPackage>true</AndroidBuildApplicationPackage>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpEngine\SharpEngine.csproj" />
+  </ItemGroup>
+
+</Project>

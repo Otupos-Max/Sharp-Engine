@@ -60,6 +60,8 @@ setas. Pressione `Esc` para fechar.
   frame.
 - Primitivas 2D: limpar tela, retângulos preenchidos/contornados, linhas,
   círculos e texturas com recorte de regiões para spritesheets.
+- Animação 2D por spritesheet com animações em loop ou de reprodução única,
+  troca/reinício de animação e integração como componente de cena.
 - Malhas trianguladas, câmera de perspectiva e desenho 3D em wireframe.
 - Host Android com renderização Canvas, input de toque simples e build de APK.
 
@@ -93,6 +95,26 @@ public override void Render(RenderContext context)
 }
 ```
 
+Para animar quadros de um spritesheet, crie uma animação com os retângulos de
+origem e adicione um `SpriteAnimator` ao objeto. A posição do objeto define o
+canto superior esquerdo do sprite:
+
+```csharp
+var animation = new SpriteAnimation(
+    [
+        new SpriteFrame(0, 0, 32, 32),
+        new SpriteFrame(32, 0, 32, 32),
+        new SpriteFrame(64, 0, 32, 32)
+    ],
+    TimeSpan.FromMilliseconds(120));
+
+player.AddComponent(new SpriteAnimator(spriteTexture, animation, new Vector2(64, 64)));
+```
+
+Animações não cíclicas param no último quadro e sinalizam `IsComplete`. Use
+`Play(animation)` para reiniciar ou `Play(animation, restart: false)` para
+manter o progresso quando a animação já estiver ativa.
+
 O host desktop SDL aceita BMP sem SDL_image; o host Android usa os formatos
 suportados pelo decodificador nativo `BitmapFactory`. No Android, coloque as imagens em
 `samples/SharpEngine.Android/Assets` e carregue pelo caminho relativo aos assets.
@@ -116,15 +138,15 @@ SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software dotnet test tests/SharpEngine.T
 ## Limitações atuais
 
 Esta é uma fundação funcional, ainda não uma engine completa. A renderização 3D
-atual é wireframe; ainda faltam renderização 3D sólida com materiais, animação
-2D, pipeline/editor de assets, áudio, física e assinatura de release própria.
+atual é wireframe; ainda faltam renderização 3D sólida com materiais, transições
+avançadas de animação, pipeline/editor de assets, áudio, física e assinatura de
+release própria.
 O APK Android atual é um app de demonstração/debug com backend Canvas; não é um
 editor nem um pacote assinado para distribuição na Google Play.
 
 ## Próximas etapas sugeridas
 
-1. Adicionar animação 2D e ferramentas para spritesheets.
-2. Introduzir renderização 3D sólida com profundidade e materiais.
-3. Separar recursos em sistemas de assets e áudio, e ampliar o input mobile.
-4. Criar um editor de cenas e melhorar os controles/configuração Android.
-5. Preparar assinatura de release e distribuição para Google Play.
+1. Introduzir renderização 3D sólida com profundidade e materiais.
+2. Separar recursos em sistemas de assets e áudio, e ampliar o input mobile.
+3. Criar um editor de cenas e melhorar os controles/configuração Android.
+4. Preparar assinatura de release e distribuição para Google Play.
